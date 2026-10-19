@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZoneRisk — Micro-Zonal Risk Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --bg:        #080c14;
+  --surface:   #0d1424;
+  --card:      #111827;
+  --border:    rgba(255,255,255,0.07);
+  --accent:    #00e5a0;
+  --accent2:   #ff6b4a;
+  --accent3:   #4a9eff;
+  --text:      #e8edf5;
+  --muted:     #6b7a99;
+  --low:       #00e5a0;
+  --mid:       #ffb74d;
+  --high:      #ff4a4a;
+  --font-mono: 'Space Mono', monospace;
+  --font-main: 'Outfit', sans-serif;
+  --topbar-bg: rgba(8,12,20,0.92);
+  --chart-grid: rgba(255,255,255,0.04);
+  --chart-tick: #6b7a99;
+}
+body.light {
+  --bg:        #f0f4f8;
+  --surface:   #e2e8f0;
+  --card:      #ffffff;
+  --border:    rgba(0,0,0,0.08);
+  --accent:    #00a372;
+  --accent2:   #e05a3a;
+  --accent3:   #2b7de9;
+  --text:      #0f172a;
+  --muted:     #64748b;
+  --low:       #00a372;
+  --mid:       #e07b00;
+  --high:      #dc2626;
+  --topbar-bg: rgba(240,244,248,0.92);
+  --chart-grid: rgba(0,0,0,0.05);
+  --chart-tick: #64748b;
+}
+body.light::before { opacity:.02; }
+body.light .glow1  { background:rgba(0,163,114,.06); }
+body.light .glow2  { background:rgba(43,125,233,.05); }
+body.light .btn-accent { color:#fff; }
+body.light .cta-btn { color:#fff; }
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body { background:var(--bg); color:var(--text); font-family:var(--font-main); min-height:100vh; overflow-x:hidden; }
+body::before {
+  content:''; position:fixed; inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:0;
+}
+.bg-glow { position:fixed; border-radius:50%; filter:blur(80px); pointer-events:none; z-index:0; }
+.glow1 { width:400px;height:400px;background:rgba(0,229,160,.04); top:-100px;right:-80px; }
+.glow2 { width:500px;height:500px;background:rgba(74,158,255,.03); bottom:-150px;left:-100px; }
+#loading { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:9999; gap:16px; }
+.load-ring { width:52px;height:52px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .9s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.load-text { font-family:var(--font-mono); font-size:11px; color:var(--muted); letter-spacing:.15em; text-transform:uppercase; }
+.topbar { position:fixed; top:0; left:0; right:0; height:56px; background:var(--topbar-bg); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 28px; gap:16px; z-index:100; }
+.logo { font-family:var(--font-mono); font-size:13px; font-weight:700; color:var(--accent); letter-spacing:.08em; flex:1; }
+.logo span { color:var(--muted); font-weight:400; }
+.pill { font-family:var(--font-mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; padding:4px 10px; border:1px solid var(--border); border-radius:20px; color:var(--muted); }
+.pill.live::before { content:''; display:inline-block; width:6px;height:6px; background:var(--accent); border-radius:50%; margin-right:6px; animation:pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.theme-toggle { background:transparent; border:1px solid var(--border); border-radius:20px; padding:4px 10px; cursor:pointer; font-size:14px; transition:all .2s; line-height:1; color:var(--text); }
+.theme-toggle:hover { border-color:var(--accent); transform:rotate(20deg); }
+.page { padding-top:56px; }
+.hidden { display:none !important; }
+
+/* LANDING PAGE */
+#page1 { min-height:100vh; display:flex; flex-direction:column; position:relative; z-index:1; }
+.hero { display:grid; grid-template-columns:1fr 420px; gap:48px; align-items:center; padding:80px 60px 64px; max-width:1280px; margin:0 auto; width:100%; }
+.hero-tag { display:inline-flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); border:1px solid rgba(0,229,160,.25); background:rgba(0,229,160,.06); padding:5px 14px; border-radius:20px; margin-bottom:24px; }
+.hero-tag::before { content:''; width:6px;height:6px; background:var(--accent); border-radius:50%; animation:pulse 1.8s ease-in-out infinite; }
+.hero-title { font-size:clamp(34px,4vw,56px); font-weight:700; line-height:1.08; letter-spacing:-.025em; margin-bottom:20px; }
+.hero-title .hl { color:var(--accent); }
+.hero-desc { font-size:16px; color:var(--muted); line-height:1.75; margin-bottom:36px; max-width:520px; }
+.hero-badges { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:40px; }
+.badge { font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; padding:5px 12px; border-radius:6px; border:1px solid var(--border); color:var(--muted); }
+.badge.b-green  { border-color:rgba(0,229,160,.3);  color:var(--low);   background:rgba(0,229,160,.06); }
+.badge.b-blue   { border-color:rgba(74,158,255,.3); color:var(--accent3); background:rgba(74,158,255,.06); }
+.badge.b-orange { border-color:rgba(255,183,77,.3); color:var(--mid);   background:rgba(255,183,77,.06); }
+.badge.b-red    { border-color:rgba(255,74,74,.3);  color:var(--high);  background:rgba(255,74,74,.06); }
+.hero-stats { display:flex; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); width:fit-content; }
+.hstat { padding:16px 24px; border-right:1px solid var(--border); }
+.hstat:last-child { border-right:none; }
+.hstat-val { font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--accent); line-height:1; margin-bottom:4px; }
+.hstat-lbl { font-size:11px; color:var(--muted); white-space:nowrap; }
+.hero-form { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:32px; box-shadow:0 32px 80px rgba(0,0,0,.25); position:relative; }
+.hero-form::before { content:''; position:absolute; top:-1px; left:32px; right:32px; height:1px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:.5; }
+.form-card-title { font-size:17px; font-weight:700; margin-bottom:4px; }
+.form-card-sub { font-size:13px; color:var(--muted); margin-bottom:24px; line-height:1.5; }
+.form-group { margin-bottom:14px; }
+.form-label { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.15em; color:var(--muted); display:block; margin-bottom:6px; }
+.form-input { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:11px 14px; color:var(--text); font-family:var(--font-main); font-size:14px; outline:none; transition:border-color .2s; }
+.form-input:focus { border-color:var(--accent); }
+.form-input::placeholder { color:var(--muted); }
+select.form-input { cursor:pointer; }
+select.form-input option { background:var(--card); }
+.divider { display:flex; align-items:center; gap:12px; margin:16px 0; color:var(--muted); font-size:11px; font-family:var(--font-mono); letter-spacing:.1em; }
+.divider::before,.divider::after { content:''; flex:1; height:1px; background:var(--border); }
+.btn { width:100%; padding:12px 20px; border:none; border-radius:8px; font-family:var(--font-main); font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+.btn-accent { background:var(--accent); color:#080c14; }
+.btn-accent:hover { filter:brightness(1.1); transform:translateY(-1px); }
+.btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); margin-bottom:12px; }
+.btn-outline:hover { border-color:var(--accent3); color:var(--accent3); }
+.how-strip { background:var(--surface); border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:48px 60px; }
+.how-strip-inner { max-width:1280px; margin:0 auto; }
+.how-title { font-family:var(--font-mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:32px; text-align:center; }
+.how-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:2px; }
+.how-step { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px 20px; position:relative; }
+.how-step:not(:last-child)::after { content:'→'; position:absolute; right:-14px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:16px; z-index:2; }
+.step-num { font-family:var(--font-mono); font-size:11px; color:var(--accent); margin-bottom:10px; letter-spacing:.1em; }
+.step-icon { font-size:24px; margin-bottom:10px; display:block; }
+.step-name { font-size:14px; font-weight:600; margin-bottom:6px; }
+.step-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+.features-section { padding:56px 60px; max-width:1280px; margin:0 auto; width:100%; }
+.features-heading { font-family:var(--font-mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; text-align:center; }
+.features-subheading { font-size:24px; font-weight:700; text-align:center; margin-bottom:40px; }
+.features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.feat-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:24px; transition:border-color .2s; }
+.feat-card:hover { border-color:rgba(0,229,160,.25); }
+.feat-icon-wrap { width:40px;height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-bottom:14px; }
+.fw-green  { background:rgba(0,229,160,.12);   border:1px solid rgba(0,229,160,.2); }
+.fw-blue   { background:rgba(74,158,255,.12);  border:1px solid rgba(74,158,255,.2); }
+.fw-orange { background:rgba(255,183,77,.12);  border:1px solid rgba(255,183,77,.2); }
+.fw-red    { background:rgba(255,74,74,.12);   border:1px solid rgba(255,74,74,.2); }
+.fw-purple { background:rgba(167,139,250,.12); border:1px solid rgba(167,139,250,.2); }
+.fw-teal   { background:rgba(45,212,191,.12);  border:1px solid rgba(45,212,191,.2); }
+.feat-name { font-size:15px; font-weight:600; margin-bottom:6px; }
+.feat-desc { font-size:13px; color:var(--muted); line-height:1.65; }
+.metrics-section { background:var(--surface); border-top:1px solid var(--border); padding:48px 60px; }
+.metrics-inner { max-width:1280px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:center; }
+.metrics-copy-tag { font-family:var(--font-mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); margin-bottom:12px; }
+.metrics-copy-title { font-size:26px; font-weight:700; margin-bottom:14px; line-height:1.25; }
+.metrics-copy-desc { font-size:14px; color:var(--muted); line-height:1.75; margin-bottom:24px; }
+.metrics-list { display:flex; flex-direction:column; gap:10px; }
+.mitem { display:flex; align-items:center; gap:10px; font-size:13px; }
+.mitem-dot { width:8px;height:8px; border-radius:50%; flex-shrink:0; }
+.mitem-label { font-weight:600; min-width:110px; }
+.mitem-val { color:var(--muted); }
+.risk-scale-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:28px; }
+.rsc-title { font-family:var(--font-mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin-bottom:20px; }
+.rsc-bar { height:10px; border-radius:5px; background:linear-gradient(90deg,var(--low),var(--mid),var(--high)); margin-bottom:8px; }
+.rsc-labels { display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; margin-bottom:24px; }
+.rsc-zones { display:flex; flex-direction:column; gap:10px; }
+.rsc-zone { display:flex; align-items:center; gap:12px; }
+.rsc-zone-dot { width:10px;height:10px; border-radius:50%; flex-shrink:0; }
+.rsc-zone-name { font-weight:600; font-size:13px; min-width:110px; }
+.rsc-zone-desc { font-size:12px; color:var(--muted); }
+.cta-section { padding:56px 60px; text-align:center; max-width:1280px; margin:0 auto; width:100%; }
+.cta-title { font-size:28px; font-weight:700; margin-bottom:12px; }
+.cta-sub { font-size:15px; color:var(--muted); margin-bottom:28px; }
+.cta-btn { display:inline-flex; align-items:center; gap:8px; padding:14px 32px; background:var(--accent); color:#080c14; font-family:var(--font-main); font-size:15px; font-weight:700; border:none; border-radius:10px; cursor:pointer; transition:all .2s; }
+.cta-btn:hover { filter:brightness(1.1); transform:translateY(-2px); }
+
+/* DASHBOARD */
+#page2 { padding-bottom:60px; }
+.tab-bar { display:flex; gap:2px; padding:0 28px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:56px; z-index:90; }
+.tab { font-family:var(--font-mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; padding:12px 18px; cursor:pointer; border-bottom:2px solid transparent; color:var(--muted); transition:all .2s; background:transparent; border-top:none; border-left:none; border-right:none; }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.tab:hover:not(.active) { color:var(--text); }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+.dash-container { max-width:1200px; margin:0 auto; padding:28px 20px; }
+.back-btn { display:inline-flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:11px; letter-spacing:.1em; color:var(--muted); cursor:pointer; text-transform:uppercase; padding:8px 14px; border:1px solid var(--border); border-radius:6px; background:transparent; margin-bottom:24px; transition:all .2s; }
+.back-btn:hover { color:var(--text); border-color:var(--accent3); }
+.section-label { font-family:var(--font-mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+.dash-grid { display:grid; grid-template-columns:260px 1fr; gap:16px; margin-bottom:16px; }
+.map-card { background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+#map { height:380px; }
+.legend-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:12px; }
+.legend-item { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); }
+.legend-dot { width:10px;height:10px; border-radius:50%; flex-shrink:0; }
+.metrics-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:16px; }
+.metric-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 14px; }
+.metric-label { font-family:var(--font-mono); font-size:9px; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+.metric-value { font-size:20px; font-weight:700; font-family:var(--font-mono); color:var(--text); }
+.metric-unit { font-size:11px; color:var(--muted); font-family:var(--font-mono); }
+.ai-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:24px; display:flex; flex-direction:column; gap:14px; }
+.ai-head { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+.ai-box { background:var(--bg2,rgba(127,127,127,.08)); border-radius:10px; padding:14px; font-size:14px; line-height:1.6; color:var(--text); }
+.rec-list { list-style:none; margin:0; padding:0; }
+.rec-list li { padding:8px 0 8px 22px; position:relative; font-size:13px; color:var(--muted,var(--text)); border-bottom:1px solid var(--border); }
+.rec-list li:before { content:"›"; position:absolute; left:6px; color:var(--accent); font-weight:700; }
+.ai-feedback { border-top:1px solid var(--border); padding-top:16px; }
+.ai-feedback-row { display:flex; gap:10px; align-items:center; }
+.ai-feedback-row .btn-sm { width:auto; padding:10px 18px; white-space:nowrap; }
+.bottom-row { display:grid; grid-template-columns:1fr 300px; gap:16px; }
+.chart-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; }
+.score-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:24px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+.score-ring { width:110px;height:110px; border-radius:50%; border:3px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; margin:8px 0; }
+.score-num { font-family:var(--font-mono); font-size:38px; font-weight:700; line-height:1; }
+.score-sub { font-size:10px; font-family:var(--font-mono); color:var(--muted); letter-spacing:.1em; text-transform:uppercase; }
+.risk-badge { font-family:var(--font-mono); font-size:11px; letter-spacing:.15em; text-transform:uppercase; padding:5px 14px; border-radius:20px; font-weight:700; }
+.risk-low  { background:rgba(0,229,160,.15);  color:var(--low);  border:1px solid rgba(0,229,160,.3); }
+.risk-mid  { background:rgba(255,183,77,.15);  color:var(--mid);  border:1px solid rgba(255,183,77,.3); }
+.risk-high { background:rgba(255,74,74,.15);   color:var(--high); border:1px solid rgba(255,74,74,.3); }
+.feedback-select { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-family:var(--font-main); font-size:13px; outline:none; }
+.feedback-select option { background:var(--card); }
+.btn-sm { width:100%; padding:10px; border-radius:8px; border:none; background:var(--accent); color:#080c14; font-family:var(--font-main); font-size:13px; font-weight:600; cursor:pointer; transition:all .2s; }
+.btn-sm:hover { filter:brightness(1.1); }
+.feedback-msg { font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; color:var(--accent); text-align:center; min-height:16px; }
+.panel-container { max-width:1200px; margin:0 auto; padding:24px 20px; }
+.data-table { width:100%; border-collapse:collapse; }
+.data-table th { font-family:var(--font-mono); font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); }
+.data-table td { padding:12px; font-size:13px; border-bottom:1px solid var(--border); color:var(--text); }
+.data-table tr:last-child td { border-bottom:none; }
+.data-table tr:hover td { background:rgba(255,255,255,.02); }
+.table-card { background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+.score-pill { display:inline-block; font-family:var(--font-mono); font-size:11px; padding:2px 8px; border-radius:10px; font-weight:700; }
+.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+.stat-box { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; }
+.stat-num { font-family:var(--font-mono); font-size:28px; font-weight:700; color:var(--accent); }
+.stat-lbl { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); margin-top:4px; }
+.empty-state { text-align:center; padding:40px; color:var(--muted); font-size:14px; }
+
+/* Responsive landing */
+@media(max-width:1100px) {
+  .hero { grid-template-columns:1fr; gap:32px; padding:60px 40px 48px; }
+  .hero-form { max-width:520px; }
+  .how-steps { grid-template-columns:repeat(2,1fr); gap:12px; }
+  .how-step:nth-child(2)::after { display:none; }
+  .features-grid { grid-template-columns:repeat(2,1fr); }
+  .metrics-inner { grid-template-columns:1fr; }
+}
+@media(max-width:700px) {
+  .hero { padding:40px 20px 32px; }
+  .how-strip,.metrics-section,.features-section,.cta-section { padding:36px 20px; }
+  .how-steps { grid-template-columns:1fr; }
+  .how-step::after { display:none !important; }
+  .features-grid { grid-template-columns:1fr; }
+}
+/* Responsive dashboard */
+@media(max-width:900px) {
+  .dash-grid { grid-template-columns:1fr; }
+  .legend-card { flex-direction:row; flex-wrap:wrap; }
+  .metrics-row { grid-template-columns:repeat(3,1fr); }
+  .bottom-row { grid-template-columns:1fr; }
+  .stat-grid { grid-template-columns:repeat(2,1fr); }
+}
+@media(max-width:560px) {
+  .metrics-row { grid-template-columns:repeat(2,1fr); }
+  .stat-grid { grid-template-columns:1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="bg-glow glow1"></div>
+<div class="bg-glow glow2"></div>
+<div id="loading">
+  <div class="load-ring"></div>
+  <div class="load-text" id="loadText">Initialising System</div>
+</div>
+<div class="topbar">
+  <div class="logo">ZONE<span>RISK</span></div>
+  <div class="pill">v2.0</div>
+  <div class="pill live">Live Data</div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme">
+    <span id="themeIcon">☀️</span>
+  </button>
+</div>
+
+<!-- PAGE 1 — LANDING -->
+<div id="page1" class="page">
+  <div class="hero">
+    <div class="hero-left">
+      <div class="hero-tag">AI-Powered · Real-Time · India</div>
+      <h1 class="hero-title">Understand Climate Risk<br><span class="hl">Zone by Zone</span></h1>
+      <p class="hero-desc">ZoneRisk is a micro-zonal climate risk intelligence platform. Enter any location in India and instantly get a colour-coded risk map across 25 surrounding micro-zones — powered by live weather data, air quality readings, elevation, and an AI model that learns from community feedback.</p>
+      <div class="hero-badges">
+        <span class="badge b-green">🌡️ Live Temperature</span>
+        <span class="badge b-blue">💨 Air Quality Index</span>
+        <span class="badge b-orange">⛰️ Elevation Data</span>
+        <span class="badge b-red">🏙️ Urban Density</span>
+        <span class="badge">☁️ Cloud Cover</span>
+        <span class="badge">🤖 Self-Learning AI</span>
+      </div>
+      <div class="hero-stats">
+        <div class="hstat"><div class="hstat-val">25</div><div class="hstat-lbl">Micro-zones per scan</div></div>
+        <div class="hstat"><div class="hstat-val">5</div><div class="hstat-lbl">Climate signals</div></div>
+        <div class="hstat"><div class="hstat-val">0–10</div><div class="hstat-lbl">Risk score scale</div></div>
+        <div class="hstat"><div class="hstat-val">Live</div><div class="hstat-lbl">OpenWeatherMap API</div></div>
+      </div>
+    </div>
+    <div class="hero-form">
+      <div class="form-card-title">Analyse a Location</div>
+      <div class="form-card-sub">Enter a pincode or city name to generate your risk map in seconds.</div>
+      <div class="form-group"><label class="form-label">Pincode</label><input id="pincode" class="form-input" placeholder="e.g. 600001"></div>
+      <div class="form-group"><label class="form-label">Address</label><input id="address" class="form-input" placeholder="e.g. Chennai, India"></div>
+      <div class="form-group">
+        <label class="form-label">Area Type</label>
+        <select id="areaType" class="form-input">
+          <option value="urban">Urban</option>
+          <option value="coastal">Coastal</option>
+          <option value="rural">Rural</option>
+          <option value="hill">Hill</option>
+          <option value="industrial">Industrial</option>
+        </select>
+      </div>
+      <div class="divider">or</div>
+      <button class="btn btn-outline" onclick="useMyLocation()">📍 Use My Location</button>
+      <button class="btn btn-accent" onclick="loadDashboard()">Analyse Risk →</button>
+    </div>
+  </div>
+
+  <div class="how-strip">
+    <div class="how-strip-inner">
+      <div class="how-title">How it works</div>
+      <div class="how-steps">
+        <div class="how-step"><div class="step-num">01</div><span class="step-icon">📍</span><div class="step-name">Enter a Location</div><div class="step-desc">Type a pincode, city name, or let the app detect your GPS coordinates automatically.</div></div>
+        <div class="how-step"><div class="step-num">02</div><span class="step-icon">🌐</span><div class="step-name">Live Data Fetch</div><div class="step-desc">Real-time temperature, cloud cover, AQI, elevation and urban density are pulled from OpenWeatherMap.</div></div>
+        <div class="how-step"><div class="step-num">03</div><span class="step-icon">🤖</span><div class="step-name">AI Risk Scoring</div><div class="step-desc">Our weighted AI model calculates a risk score (0–10) for each of the 25 micro-zones around your location.</div></div>
+        <div class="how-step"><div class="step-num">04</div><span class="step-icon">🗺️</span><div class="step-name">Interactive Map</div><div class="step-desc">Zones are colour-coded green / orange / red on a live Leaflet map. Submit feedback to improve the AI.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="features-section">
+    <div class="features-heading">Platform features</div>
+    <div class="features-subheading">Everything you need to understand local climate risk</div>
+    <div class="features-grid">
+      <div class="feat-card"><div class="feat-icon-wrap fw-green">🗺️</div><div class="feat-name">25-Cell Micro-Zone Grid</div><div class="feat-desc">Each scan generates a 5×5 grid of cells centred on your location. Every cell is independently scored and colour-coded — giving you a hyper-local picture of risk, not just a city-level average.</div></div>
+      <div class="feat-card"><div class="feat-icon-wrap fw-blue">🌤️</div><div class="feat-name">Real-Time Climate Data</div><div class="feat-desc">Live data from the OpenWeatherMap API: current temperature, cloud cover percentage, AQI proxy, estimated elevation, and urban density — refreshed on every scan.</div></div>
+      <div class="feat-card"><div class="feat-icon-wrap fw-purple">🤖</div><div class="feat-name">Self-Learning AI Model</div><div class="feat-desc">After each scan you can rate the accuracy. The AI adjusts its internal weights — up when correct, down when wrong — so the model gets more accurate with every piece of feedback.</div></div>
+      <div class="feat-card"><div class="feat-icon-wrap fw-orange">📊</div><div class="feat-name">History &amp; Leaderboard</div><div class="feat-desc">All searches are saved and accessible via the History tab. The Leaderboard shows the top 10 highest-risk zones ever scanned globally — sorted by AI risk score.</div></div>
+      <div class="feat-card"><div class="feat-icon-wrap fw-red">📍</div><div class="feat-name">Multiple Input Methods</div><div class="feat-desc">Search by Indian pincode, full address, or let the browser use your GPS coordinates. Any of the three routes you into the same rich risk dashboard instantly.</div></div>
+      <div class="feat-card"><div class="feat-icon-wrap fw-teal">🌙</div><div class="feat-name">Light &amp; Dark Mode</div><div class="feat-desc">Switch between a deep dark geo-intelligence theme and a clean light mode at any time using the toggle in the top bar. Your preference is saved for next time.</div></div>
+    </div>
+  </div>
+
+  <div class="metrics-section">
+    <div class="metrics-inner">
+      <div>
+        <div class="metrics-copy-tag">What we measure</div>
+        <div class="metrics-copy-title">5 climate signals,<br>one unified score</div>
+        <div class="metrics-copy-desc">ZoneRisk combines five independent climate signals into one weighted risk score per zone. The AI model adjusts the weight of each signal over time based on your feedback, making the score progressively more accurate for your region and area type.</div>
+        <div class="metrics-list">
+          <div class="mitem"><div class="mitem-dot" style="background:var(--high)"></div><span class="mitem-label">Temperature</span><span class="mitem-val">Live °C from OpenWeatherMap</span></div>
+          <div class="mitem"><div class="mitem-dot" style="background:var(--mid)"></div><span class="mitem-label">Cloud Cover</span><span class="mitem-val">Atmospheric cover in %</span></div>
+          <div class="mitem"><div class="mitem-dot" style="background:var(--accent3)"></div><span class="mitem-label">AQI Index</span><span class="mitem-val">Air quality proxy (0–150)</span></div>
+          <div class="mitem"><div class="mitem-dot" style="background:var(--low)"></div><span class="mitem-label">Elevation</span><span class="mitem-val">Estimated altitude in metres</span></div>
+          <div class="mitem"><div class="mitem-dot" style="background:rgba(167,139,250,0.9)"></div><span class="mitem-label">Urban Density</span><span class="mitem-val">Built-up area proxy (0–100%)</span></div>
+        </div>
+      </div>
+      <div class="risk-scale-card">
+        <div class="rsc-title">Risk Score Scale</div>
+        <div class="rsc-bar"></div>
+        <div class="rsc-labels"><span style="color:var(--low)">0 — Safe</span><span style="color:var(--mid)">5 — Caution</span><span style="color:var(--high)">10 — Danger</span></div>
+        <div class="rsc-zones">
+          <div class="rsc-zone"><div class="rsc-zone-dot" style="background:var(--low)"></div><div class="rsc-zone-name">Low Risk (0–3)</div><div class="rsc-zone-desc">Conditions are favourable. No immediate climate concern for this zone.</div></div>
+          <div class="rsc-zone"><div class="rsc-zone-dot" style="background:var(--mid)"></div><div class="rsc-zone-name">Moderate Risk (4–6)</div><div class="rsc-zone-desc">Elevated climate stress. Monitor conditions and exercise caution.</div></div>
+          <div class="rsc-zone"><div class="rsc-zone-dot" style="background:var(--high)"></div><div class="rsc-zone-name">High Risk (7–10)</div><div class="rsc-zone-desc">Significant climate hazard detected. Action or avoidance recommended.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cta-section">
+    <div class="cta-title">Ready to scan your location?</div>
+    <div class="cta-sub">It takes less than 10 seconds to get a full climate risk breakdown for any location in India.</div>
+    <button class="cta-btn" onclick="window.scrollTo({top:0,behavior:'smooth'}); document.getElementById('pincode').focus()">Get Started →</button>
+  </div>
+</div>
+
+<!-- PAGE 2 — DASHBOARD -->
+<div id="page2" class="page hidden">
+  <div class="tab-bar">
+    <button class="tab active" onclick="switchTab('map',this)">🗺️ Risk Map</button>
+    <button class="tab" onclick="switchTab('history',this)">📋 History</button>
+    <button class="tab" onclick="switchTab('leaderboard',this)">🏆 Leaderboard</button>
+    <button class="tab" onclick="switchTab('stats',this)">📊 Stats</button>
+  </div>
+
+  <!-- MAP TAB -->
+  <div id="tab-map" class="tab-content active">
+    <div class="dash-container">
+      <button class="back-btn" onclick="goBack()">← Back</button>
+      <div class="section-label">Grid-Map View</div>
+      <div class="dash-grid">
+        <div class="legend-card">
+          <div class="section-label" style="margin-bottom:4px">Risk Legend</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--low)"></div>Low Risk</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--mid)"></div>Moderate Risk</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--high)"></div>High Risk</div>
+          <div style="margin-top:auto;border-top:1px solid var(--border);padding-top:14px;">
+            <div class="section-label">Area Type</div>
+            <div id="displayAreaType" style="font-family:var(--font-mono);font-size:13px;color:var(--accent);text-transform:capitalize;">—</div>
+          </div>
+        </div>
+        <div class="map-card"><div id="map"></div></div>
+      </div>
+      <div class="section-label">Climate Metrics</div>
+      <div class="metrics-row">
+        <div class="metric-card"><div class="metric-label">Temperature</div><div><span class="metric-value" id="temp">—</span> <span class="metric-unit">°C</span></div></div>
+        <div class="metric-card"><div class="metric-label">Cloud Cover</div><div><span class="metric-value" id="rain">—</span> <span class="metric-unit">%</span></div></div>
+        <div class="metric-card"><div class="metric-label">AQI Index</div><div><span class="metric-value" id="aqi">—</span></div></div>
+        <div class="metric-card"><div class="metric-label">Elevation</div><div><span class="metric-value" id="elev">—</span> <span class="metric-unit">m</span></div></div>
+        <div class="metric-card"><div class="metric-label">Urban Density</div><div><span class="metric-value" id="urban">—</span> <span class="metric-unit">%</span></div></div>
+      </div>
+      <div class="section-label">AI Risk Summary &amp; Recommendations</div>
+      <div class="ai-card">
+        <div class="ai-head">
+          <div class="score-ring" id="scoreRing">
+            <div class="score-num" id="score">—</div>
+            <div class="score-sub">/ 10</div>
+          </div>
+          <div class="risk-badge" id="category">Computing…</div>
+        </div>
+        <div class="ai-box" id="aiSummary">—</div>
+        <ul class="rec-list" id="aiRecs"></ul>
+        <div class="ai-feedback">
+          <div class="section-label" style="margin-bottom:8px">Was this assessment accurate?</div>
+          <div class="ai-feedback-row">
+            <select id="match" class="feedback-select">
+              <option value="">Select accuracy…</option>
+              <option value="yes">✓ Result matches</option>
+              <option value="no">✗ Needs correction</option>
+            </select>
+            <button class="btn-sm" onclick="submitFeedback()">Submit Feedback</button>
+          </div>
+          <p class="feedback-msg" id="feedbackMsg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div id="tab-history" class="tab-content">
+    <div class="panel-container">
+      <div class="section-label" style="margin-bottom:16px">Recent Searches</div>
+      <div class="table-card">
+        <table class="data-table">
+          <thead><tr><th>Location</th><th>Area</th><th>Score</th><th>Temp</th><th>AQI</th><th>When</th><th></th></tr></thead>
+          <tbody id="historyBody"><tr><td colspan="7" class="empty-state">Loading history…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<button onclick="clearHistory()" style="
+  background:red;
+  color:white;
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  margin-bottom:10px;
+">
+🗑️ Clear History
+</button>
+
+  <!-- LEADERBOARD TAB -->
+  <div id="tab-leaderboard" class="tab-content">
+    <div class="panel-container">
+      <div class="section-label" style="margin-bottom:16px">Top 10 Highest Risk Zones</div>
+      <div class="table-card">
+        <table class="data-table">
+          <thead><tr><th>#</th><th>Location</th><th>Area</th><th>Score</th><th>Category</th><th>Temp</th><th>AQI</th></tr></thead>
+          <tbody id="leaderboardBody"><tr><td colspan="7" class="empty-state">Loading leaderboard…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS TAB -->
+  <div id="tab-stats" class="tab-content">
+    <div class="panel-container">
+      <div class="section-label" style="margin-bottom:16px">System Statistics</div>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="stat-num" id="statTotal">—</div><div class="stat-lbl">Total Analyses</div></div>
+        <div class="stat-box"><div class="stat-num" id="statAvg">—</div><div class="stat-lbl">Average Score</div></div>
+        <div class="stat-box"><div class="stat-num" id="statWeightTemp">—</div><div class="stat-lbl">AI Temp Weight</div></div>
+        <div class="stat-box"><div class="stat-num" id="statWeightAqi">—</div><div class="stat-lbl">AI AQI Weight</div></div>
+      </div>
+      <div class="section-label" style="margin-bottom:12px">Risk Distribution</div>
+      <div class="chart-card"><canvas id="statsChart" style="max-height:300px"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Theme */
+let isLight = localStorage.getItem('theme') === 'light';
+function applyTheme() {
+  document.body.classList.toggle('light', isLight);
+  document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  isLight = !isLight;
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  applyTheme();
+  if (chart) drawChart();
+}
+applyTheme();
+
+/* State */
+let currentAnalysisId = null;
+let map, gridTemps = [], chart, statsChart;
+
+/* Loading */
+function showLoading(msg = 'Analysing…') {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('loadText').textContent = msg;
+}
+function hideLoading() { document.getElementById('loading').style.display = 'none'; }
+window.onload = () => hideLoading();
+
+/* Tabs */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'history')     loadHistory();
+  if (name === 'leaderboard') loadLeaderboard();
+  if (name === 'stats')       loadStats();
+}
+
+/* Navigation */
+function goBack() {
+  document.getElementById('page2').classList.add('hidden');
+  document.getElementById('page1').classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab').classList.add('active');
+  document.getElementById('tab-map').classList.add('active');
+}
+
+/* Entry */
+async function loadDashboard() {
+  const pin  = document.getElementById('pincode').value.trim();
+  const addr = document.getElementById('address').value.trim();
+  if (!pin && !addr) { alert('Please enter a pincode or address.'); return; }
+  showLoading('Geocoding location…');
+  try {
+    const res  = await fetch('/api/geocode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pincode: pin, address: addr })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Location not found'); hideLoading(); return; }
+    await switchToDash(data.lat, data.lon, addr, pin);
+  } catch {
+    alert('Could not reach server. Is it running?');
+    hideLoading();
+  }
+}
+
+async function switchToDash(lat, lon, address = '', pincode = '') {
+  const areaType = document.getElementById('areaType').value;
+  document.getElementById('page1').classList.add('hidden');
+  document.getElementById('page2').classList.remove('hidden');
+  document.getElementById('displayAreaType').textContent = areaType;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab').classList.add('active');
+  document.getElementById('tab-map').classList.add('active');
+  initMap(lat, lon);
+  showLoading('Fetching climate data…');
+  try {
+    const res  = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lon, address, pincode, areaType })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error); hideLoading(); return; }
+    currentAnalysisId = data.id;
+    renderMetrics(data);
+    renderGrid(data.grid);
+    renderAI(data);
+  } catch { alert('Server error while fetching climate data.'); }
+  hideLoading();
+}
+
+/* Map */
+function initMap(lat, lon) {
+  if (map) map.remove();
+  map = L.map('map').setView([lat, lon], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+}
+function renderGrid(grid) {
+  grid.forEach(c => {
+    L.rectangle([[c.la-0.005,c.lo-0.005],[c.la+0.005,c.lo+0.005]],
+      { color:c.color, weight:0.5, fillOpacity:0.4, fillColor:c.color }).addTo(map);
+  });
+}
+
+/* Metrics */
+function renderMetrics(data) {
+  document.getElementById('temp').textContent  = (+data.temp).toFixed(1);
+  document.getElementById('rain').textContent  = data.rain;
+  document.getElementById('aqi').textContent   = data.aqi;
+  document.getElementById('elev').textContent  = data.elev;
+  document.getElementById('urban').textContent = data.urban;
+  document.getElementById('score').textContent = data.score;
+  const cls = data.score < 4 ? 'risk-low' : data.score < 7 ? 'risk-mid' : 'risk-high';
+  const badge = document.getElementById('category');
+  badge.textContent = data.category;
+  badge.className   = 'risk-badge ' + cls;
+  const ringColor = data.score < 4 ? 'var(--low)' : data.score < 7 ? 'var(--mid)' : 'var(--high)';
+  document.getElementById('scoreRing').style.borderColor = ringColor;
+  document.getElementById('score').style.color = ringColor;
+}
+
+/* AI summary */
+function renderAI(data) {
+  const esc = t => String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  document.getElementById('aiSummary').textContent = data.aiSummary || 'No summary available.';
+  document.getElementById('aiRecs').innerHTML = (data.aiRecommendations || []).map(r => `<li>${esc(r)}</li>`).join('');
+  document.getElementById('match').value = '';
+  document.getElementById('feedbackMsg').textContent = '';
+}
+
+/* Chart (legacy, unused) */
+function drawChart(temps) {
+  if (!temps) return;
+  gridTemps = temps;
+  if (chart) chart.destroy();
+  const tick = getComputedStyle(document.documentElement).getPropertyValue('--chart-tick').trim() || '#6b7a99';
+  const grid = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() || 'rgba(255,255,255,0.04)';
+  chart = new Chart(document.getElementById('gridTempChart'), {
+    type: 'line',
+    data: {
+      labels: temps.map((_,i) => 'G'+(i+1)),
+      datasets: [{ data: temps, borderColor:'#00e5a0', backgroundColor:'rgba(0,229,160,0.08)', borderWidth:2, pointRadius:3, pointBackgroundColor:'#00e5a0', tension:0.4, fill:true, label:'Temp (°C)' }]
+    },
+    options: {
+      responsive:true,
+      plugins: { legend: { display:false } },
+      scales: {
+        x: { ticks:{ color:tick, font:{ family:"'Space Mono'", size:9 } }, grid:{ color:grid } },
+        y: { ticks:{ color:tick, font:{ family:"'Space Mono'", size:9 } }, grid:{ color:grid } }
+      }
+    }
+  });
+}
+
+/* Feedback */
+async function submitFeedback() {
+  const m = document.getElementById('match').value;
+  if (!m) return;
+  try {
+    const res  = await fetch('/api/feedback', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ analysisId:currentAnalysisId, match:m })
+    });
+    const data = await res.json();
+    const msg  = document.getElementById('feedbackMsg');
+    msg.textContent = data.success ? '✓ AI weights updated globally' : '✗ Error saving feedback';
+    setTimeout(() => { msg.textContent = ''; }, 3000);
+  } catch { document.getElementById('feedbackMsg').textContent = '✗ Server unreachable'; }
+}
+
+/* GPS */
+function useMyLocation() {
+  showLoading('Getting your location…');
+  navigator.geolocation.getCurrentPosition(
+    pos => switchToDash(pos.coords.latitude, pos.coords.longitude),
+    ()  => { alert('Location access denied.'); hideLoading(); }
+  );
+}
+
+/* History */
+async function loadHistory() {
+  try {
+    const res  = await fetch('/api/history?limit=20');
+    const data = await res.json();
+    const body = document.getElementById('historyBody');
+    if (!data.length) { body.innerHTML = '<tr><td colspan="7" class="empty-state">No searches yet.</td></tr>'; return; }
+    body.innerHTML = data.map(r => `<tr>
+      <td>${r.address || r.pincode || 'GPS'}</td>
+      <td style="text-transform:capitalize">${r.areaType}</td>
+      <td><span class="score-pill ${r.score<4?'risk-low':r.score<7?'risk-mid':'risk-high'}">${r.score}</span></td>
+      <td>${(+r.temp).toFixed(1)}°C</td>
+      <td>${r.aqi}</td>
+      <td style="color:var(--muted);font-size:12px">${new Date(r.createdAt).toLocaleString()}</td>
+      <td><button class="btn-sm" style="width:auto;padding:4px 10px;font-size:11px" onclick="reloadFromHistory(${r.lat},${r.lon},'${r.address||''}','${r.pincode||''}')">View</button></td>
+    </tr>`).join('');
+  } catch { document.getElementById('historyBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load.</td></tr>'; }
+}
+async function reloadFromHistory(lat, lon, address, pincode) {
+  document.getElementById('areaType').value = 'urban';
+  await switchToDash(lat, lon, address, pincode);
+}
+
+/* Leaderboard */
+async function loadLeaderboard() {
+  try {
+    const res  = await fetch('/api/leaderboard');
+    const data = await res.json();
+    const body = document.getElementById('leaderboardBody');
+    if (!data.length) { body.innerHTML = '<tr><td colspan="7" class="empty-state">No data yet.</td></tr>'; return; }
+    body.innerHTML = data.map((r,i) => `<tr>
+      <td style="font-family:var(--font-mono);font-weight:700;color:${i===0?'var(--mid)':i===1?'var(--muted)':i===2?'#cd7f32':'var(--muted)'}">#${i+1}</td>
+      <td>${r.address || r.pincode || 'GPS'}</td>
+      <td style="text-transform:capitalize">${r.areaType}</td>
+      <td><span class="score-pill ${r.score<4?'risk-low':r.score<7?'risk-mid':'risk-high'}">${r.score}</span></td>
+      <td><span class="score-pill ${r.score<4?'risk-low':r.score<7?'risk-mid':'risk-high'}">${r.category}</span></td>
+      <td>${(+r.temp).toFixed(1)}°C</td>
+      <td>${r.aqi}</td>
+    </tr>`).join('');
+  } catch { document.getElementById('leaderboardBody').innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load.</td></tr>'; }
+}
+
+/* Stats */
+async function loadStats() {
+  try {
+    const res  = await fetch('/api/stats');
+    const data = await res.json();
+    document.getElementById('statTotal').textContent      = data.totalAnalyses;
+    document.getElementById('statAvg').textContent        = data.averageScore || '0';
+    document.getElementById('statWeightTemp').textContent = (+data.currentWeights.temp).toFixed(4);
+    document.getElementById('statWeightAqi').textContent  = (+data.currentWeights.aqi).toFixed(4);
+    const breakdown = data.riskBreakdown || [];
+    const labels = breakdown.map(b => b._id);
+    const counts = breakdown.map(b => b.count);
+    const colors = labels.map(l => l==='Low Risk'?'#00e5a0':l==='Moderate Risk'?'#ffb74d':'#ff4a4a');
+    if (statsChart) statsChart.destroy();
+    statsChart = new Chart(document.getElementById('statsChart'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data:counts, backgroundColor:colors, borderWidth:0 }] },
+      options: { responsive:true, plugins: { legend: { labels: { color:getComputedStyle(document.documentElement).getPropertyValue('--chart-tick').trim(), font:{ family:"'Space Mono'", size:11 } } } } }
+    });
+  } catch { console.error('Stats load failed'); }
+}
+
+function clearHistory(){
+
+  if(!confirm("Are you sure you want to delete all history?")){
+    return;
+  }
+
+  fetch('/api/clear-history', {
+    method: 'DELETE'
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert(data.message);
+    location.reload(); // refresh page
+  })
+  .catch(err => {
+    alert("Error clearing history");
+    console.error(err);
+  });
+
+}
+
+</script>
+</body>
+</html>
